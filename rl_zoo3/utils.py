@@ -213,9 +213,6 @@ def create_test_env(
     :param env_kwargs: Optional keyword argument to pass to the env constructor
     :return:
     """
-    # Avoid circular import
-    from rl_zoo3.exp_manager import ExperimentManager
-
     # Create the environment and wrap it if necessary
     assert hyperparams is not None
     env_wrapper = get_wrapper_class(hyperparams)
@@ -226,12 +223,8 @@ def create_test_env(
         del hyperparams["env_wrapper"]
 
     vec_env_kwargs: Dict[str, Any] = {}
-    vec_env_cls = DummyVecEnv
-    if n_envs > 1 or (ExperimentManager.is_bullet(env_id) and should_render):
-        # HACK: force SubprocVecEnv for Bullet env
-        # as Pybullet envs does not follow gym.render() interface
-        vec_env_cls = SubprocVecEnv  # type: ignore[assignment]
-        # start_method = 'spawn' for thread safe
+    # Avoid potential shared memory issue
+    vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
 
     # Fix for gym 0.26, to keep old behavior
     env_kwargs = env_kwargs or {}
@@ -254,7 +247,7 @@ def create_test_env(
         seed=seed,
         wrapper_class=env_wrapper,
         env_kwargs=env_kwargs,
-        vec_env_cls=vec_env_cls,
+        vec_env_cls=vec_env_cls,  # type: ignore[arg-type]
         vec_env_kwargs=vec_env_kwargs,
     )
 
@@ -408,7 +401,7 @@ def get_saved_hyperparams(
         if os.path.isfile(config_file):
             # Load saved hyperparameters
             with open(os.path.join(stats_path, "config.yml")) as f:
-                hyperparams = yaml.load(f, Loader=yaml.UnsafeLoader)  # pytype: disable=module-attr
+                hyperparams = yaml.load(f, Loader=yaml.UnsafeLoader)
             hyperparams["normalize"] = hyperparams.get("normalize", False)
         else:
             obs_rms_path = os.path.join(stats_path, "obs_rms.pkl")
