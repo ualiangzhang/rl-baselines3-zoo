@@ -303,10 +303,10 @@ class MlpExtractor(nn.Module):
         self.policy_net = nn.Sequential(*policy_net).to(device)
         self.value_net = nn.Sequential(*value_net).to(device)
         self.quantize_actor = Quantize(
-            num_embs, feature_dim, commitment_cost, Cd, reg_weight, reg_alpha
+            num_embs, net_arch.get("pi")[-1], commitment_cost, Cd, reg_weight, reg_alpha
         )
         self.quantize_critic = Quantize(
-            num_embs, feature_dim, commitment_cost, Cd, reg_weight, reg_alpha
+            num_embs, net_arch.get("vf")[-1], commitment_cost, Cd, reg_weight, reg_alpha
         )
 
     def forward(

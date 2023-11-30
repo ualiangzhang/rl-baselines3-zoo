@@ -92,23 +92,13 @@ def sample_ppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     }
 
 
-def sample_vqppo_cartpole_params(trial: optuna.Trial) -> Dict[str, Any]:
+def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     """
     Sampler for VQPPO hyperparams.
 
     :param trial:
     :return:
     """
-    batch_size = 256
-    n_steps = 32
-    gamma = 0.98
-    learning_rate = 0.001
-    learning_rate = linear_schedule(learning_rate)
-    ent_coef = 0.0
-    clip_range = 0.2
-    n_epochs = 20
-    gae_lambda = 0.8
-
     reg_weight = trial.suggest_categorical(
         "reg_weight",
         [
@@ -150,112 +140,9 @@ def sample_vqppo_cartpole_params(trial: optuna.Trial) -> Dict[str, Any]:
         ],
     )
 
-    # TODO: account when using multiple envs
-    if batch_size > n_steps:
-        batch_size = n_steps
-
     return {
-        "n_steps": n_steps,
-        "batch_size": batch_size,
-        "gamma": gamma,
-        "learning_rate": learning_rate,
-        "ent_coef": ent_coef,
         "vq_coef": vq_coef,
-        "clip_range": clip_range,
-        "n_epochs": n_epochs,
-        "gae_lambda": gae_lambda,
         "policy_kwargs": dict(
-            net_arch_kwargs=dict(
-                reg_weight=reg_weight,
-                reg_alpha=reg_alpha,
-                num_embs=num_embs,
-            )
-        ),
-    }
-
-
-def sample_vqppo_halfcheetah_params(trial: optuna.Trial) -> Dict[str, Any]:
-    """
-    Sampler for VQPPO hyperparams.
-
-    :param trial:
-    :return:
-    """
-    normalize = True
-    batch_size = 64
-    n_steps = 512
-    gamma = 0.98
-    learning_rate = 2.0633e-05
-    ent_coef = 0.000401762
-    clip_range = 0.1
-    n_epochs = 20
-    gae_lambda = 0.92
-    max_grad_norm = 0.8
-    vf_coef = 0.58096
-
-    reg_weight = trial.suggest_categorical(
-        "reg_weight",
-        [
-            0.0001,
-            0.00025,
-            0.0005,
-            0.001,
-            0.0025,
-            0.005,
-            0.01,
-            0.025,
-            0.05,
-            0.1,
-            0.25,
-            0.5,
-            1,
-        ],
-    )
-    reg_alpha = trial.suggest_categorical(
-        "reg_alpha", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    )
-    num_embs = trial.suggest_categorical("num_embs", [4, 8, 16, 32, 64, 128, 256])
-    vq_coef = trial.suggest_categorical(
-        "vq_coef",
-        [
-            0.0001,
-            0.00025,
-            0.0005,
-            0.001,
-            0.0025,
-            0.005,
-            0.01,
-            0.025,
-            0.05,
-            0.1,
-            0.25,
-            0.5,
-            1,
-        ],
-    )
-
-    # TODO: account when using multiple envs
-    if batch_size > n_steps:
-        batch_size = n_steps
-
-    return {
-        "normalize": normalize,
-        "max_grad_norm": max_grad_norm,
-        "vf_coef": vf_coef,
-        "n_steps": n_steps,
-        "batch_size": batch_size,
-        "gamma": gamma,
-        "learning_rate": learning_rate,
-        "ent_coef": ent_coef,
-        "vq_coef": vq_coef,
-        "clip_range": clip_range,
-        "n_epochs": n_epochs,
-        "gae_lambda": gae_lambda,
-        "policy_kwargs": dict(
-            log_std_init=-2,
-            ortho_init=False,
-            activation_fn=nn.ReLU,
-            net_arch=dict(pi=[256, 256], vf=[256, 256]),
             net_arch_kwargs=dict(
                 reg_weight=reg_weight,
                 reg_alpha=reg_alpha,
@@ -794,8 +681,7 @@ HYPERPARAMS_SAMPLER = {
     "sac": sample_sac_params,
     "tqc": sample_tqc_params,
     "ppo": sample_ppo_params,
-    "vqppo_CartPole-v1": sample_vqppo_cartpole_params,
-    "vqppo_HalfCheetah-v3": sample_vqppo_halfcheetah_params,
+    "vqppo": sample_vqppo_params,
     "td3": sample_td3_params,
     "trpo": sample_trpo_params,
 }
