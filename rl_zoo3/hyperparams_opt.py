@@ -252,11 +252,15 @@ def sample_vqppo_halfcheetah_params(trial: optuna.Trial) -> Dict[str, Any]:
         "n_epochs": n_epochs,
         "gae_lambda": gae_lambda,
         "policy_kwargs": dict(
+            log_std_init=-2,
+            ortho_init=False,
+            activation_fn=nn.ReLU,
+            net_arch=dict(pi=[256, 256], vf=[256, 256]),
             net_arch_kwargs=dict(
                 reg_weight=reg_weight,
                 reg_alpha=reg_alpha,
                 num_embs=num_embs,
-            )
+            ),
         ),
     }
 
