@@ -41,6 +41,7 @@ class Quantize(nn.Module):
         Cd: float = 5,
         reg_weight: float = 0,
         reg_alpha: float = 0.5,
+        is_relu: bool = False,
     ):
         super().__init__()
 
@@ -48,9 +49,12 @@ class Quantize(nn.Module):
         self._num_embeddings = num_embeddings
 
         self._embedding = nn.Embedding(self._num_embeddings, self._embedding_dim)
-        self._embedding.weight.data.uniform_(
-            -1 / self._num_embeddings, 1 / self._num_embeddings
-        )
+        if is_relu:
+            self._embedding.weight.data.uniform_(0, 1 / self._num_embeddings)
+        else:
+            self._embedding.weight.data.uniform_(
+                -1 / self._num_embeddings, 1 / self._num_embeddings
+            )
         self._commitment_cost = commitment_cost
         self.Cd = Cd
         self.reg_weight = reg_weight
@@ -302,11 +306,27 @@ class MlpExtractor(nn.Module):
         # If the list of layers is empty, the network will just act as an Identity module
         self.policy_net = nn.Sequential(*policy_net).to(device)
         self.value_net = nn.Sequential(*value_net).to(device)
+
+        is_relu = False
+        if activation_fn == th.nn.modules.activation.ReLU:
+            is_relu = True
         self.quantize_actor = Quantize(
-            num_embs, net_arch.get("pi")[-1], commitment_cost, Cd, reg_weight, reg_alpha
+            num_embs,
+            net_arch.get("pi")[-1],
+            commitment_cost,
+            Cd,
+            reg_weight,
+            reg_alpha,
+            is_relu=is_relu,
         )
         self.quantize_critic = Quantize(
-            num_embs, net_arch.get("vf")[-1], commitment_cost, Cd, reg_weight, reg_alpha
+            num_embs,
+            net_arch.get("vf")[-1],
+            commitment_cost,
+            Cd,
+            reg_weight,
+            reg_alpha,
+            is_relu=is_relu,
         )
 
     def forward(
@@ -318,7 +338,7 @@ class MlpExtractor(nn.Module):
         """
         actor_features = self.forward_actor(features)
         actor_vq_loss, _, actor_encoding_indices = self.quantize_actor(actor_features)
-        critic_features = self.forward_actor(features)
+        critic_features = self.forward_critic(features)
         critic_vq_loss, _, critic_encoding_indices = self.quantize_critic(
             critic_features
         )
