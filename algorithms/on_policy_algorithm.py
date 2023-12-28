@@ -67,6 +67,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         gae_lambda: float,
         ent_coef: float,
         vf_coef: float,
+        fdr_coef: float,
         vq_coef: float,
         max_grad_norm: float,
         use_sde: bool,
@@ -104,6 +105,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.gae_lambda = gae_lambda
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
+        self.fdr_coef = fdr_coef
         self.vq_coef = vq_coef
         self.max_grad_norm = max_grad_norm
         self.rollout_buffer_class = rollout_buffer_class
@@ -185,7 +187,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             with th.no_grad():
                 # Convert to pytorch tensor or to TensorDict
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs, actor_vq_loss, critic_vq_loss = self.policy(
+                actions, values, log_probs, actor_fdr_loss, critic_fdr_loss, actor_vq_loss, critic_vq_loss = self.policy(
                     obs_tensor
                 )
             actions = actions.cpu().numpy()

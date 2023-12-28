@@ -99,7 +99,7 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     :param trial:
     :return:
     """
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 0.01, log=True)
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 0.0001, log=True)
     # Uncomment to enable learning rate schedule
     lr_schedule = trial.suggest_categorical('lr_schedule', ['linear', 'constant'])
     if lr_schedule == "linear":
@@ -126,9 +126,27 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     reg_alpha = trial.suggest_categorical(
         "reg_alpha", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     )
-    num_embs = trial.suggest_categorical("num_embs", [4, 8, 16, 32, 64, 128, 256])
+    num_embs = trial.suggest_categorical("num_embs", [8, 16, 32, 64, 128, 256])
     commitment_cost = trial.suggest_categorical(
         "commitment_cost", [0.01, 0.025, 0.05, 0.1, 0.25, 0.5]
+    )
+    fdr_coef = trial.suggest_categorical(
+        "fdr_coef",
+        [
+            0.0001,
+            0.00025,
+            0.0005,
+            0.001,
+            0.0025,
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1,
+        ],
     )
     vq_coef = trial.suggest_categorical(
         "vq_coef",
@@ -151,6 +169,7 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
 
     return {
         "learning_rate": learning_rate,
+        "fdr_coef": fdr_coef,
         "vq_coef": vq_coef,
         "policy_kwargs": dict(
             net_arch_kwargs=dict(

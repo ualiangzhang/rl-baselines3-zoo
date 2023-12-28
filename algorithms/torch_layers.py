@@ -41,7 +41,6 @@ class Quantize(nn.Module):
         Cd: float = 5,
         reg_weight: float = 0,
         reg_alpha: float = 0.5,
-        is_relu: bool = False,
     ):
         super().__init__()
 
@@ -49,12 +48,9 @@ class Quantize(nn.Module):
         self._num_embeddings = num_embeddings
 
         self._embedding = nn.Embedding(self._num_embeddings, self._embedding_dim)
-        if is_relu:
-            self._embedding.weight.data.uniform_(0, 1 / self._num_embeddings)
-        else:
-            self._embedding.weight.data.uniform_(
-                -1 / self._num_embeddings, 1 / self._num_embeddings
-            )
+        self._embedding.weight.data.uniform_(
+            -1 / self._num_embeddings, 1 / self._num_embeddings
+        )
         self._commitment_cost = commitment_cost
         self.Cd = Cd
         self.reg_weight = reg_weight
@@ -272,6 +268,9 @@ class MlpExtractor(nn.Module):
         reg_weight: float = 0.1,
         reg_alpha: float = 0.5,
         num_embs: int = 8,
+        quantize_dim: int = 64,
+        alpha1: float = 20,
+        alpha2: float = 20,
     ) -> None:
         super().__init__()
         device = get_device(device)
@@ -279,6 +278,8 @@ class MlpExtractor(nn.Module):
         value_net: List[nn.Module] = []
         last_layer_dim_pi = feature_dim
         last_layer_dim_vf = feature_dim
+        self.alpha1 = alpha1
+        self.alpha2 = alpha2
 
         # save dimensions of layers in policy and value nets
         if isinstance(net_arch, dict):
@@ -307,44 +308,104 @@ class MlpExtractor(nn.Module):
         self.policy_net = nn.Sequential(*policy_net).to(device)
         self.value_net = nn.Sequential(*value_net).to(device)
 
-        is_relu = False
-        if activation_fn == th.nn.modules.activation.ReLU:
-            is_relu = True
+        self.policy_fdr_layer = nn.Sequential(
+            nn.Linear(net_arch.get("pi")[-1], net_arch.get("pi")[-1] // 2),
+            nn.ReLU(),
+            nn.Linear(net_arch.get("pi")[-1] // 2, net_arch.get("pi")[-1] // 2),
+            nn.ReLU(),
+            nn.Linear(net_arch.get("pi")[-1] // 2, quantize_dim),
+        )
+
+        self.critic_fdr_layer = nn.Sequential(
+            nn.Linear(net_arch.get("vf")[-1], net_arch.get("vf")[-1] // 2),
+            nn.ReLU(),
+            nn.Linear(net_arch.get("vf")[-1] // 2, net_arch.get("vf")[-1] // 2),
+            nn.ReLU(),
+            nn.Linear(net_arch.get("vf")[-1] // 2, quantize_dim),
+        )
+
         self.quantize_actor = Quantize(
             num_embs,
-            net_arch.get("pi")[-1],
+            quantize_dim,
             commitment_cost,
             Cd,
             reg_weight,
             reg_alpha,
-            is_relu=is_relu,
         )
         self.quantize_critic = Quantize(
             num_embs,
-            net_arch.get("vf")[-1],
+            quantize_dim,
             commitment_cost,
             Cd,
             reg_weight,
             reg_alpha,
-            is_relu=is_relu,
         )
+
+    def pairwise_sqd_distance(self, x):
+        tiled = th.tile(x[:, None, :], (1, x.shape[0], 1))
+        tiled_trans = th.transpose(tiled, 0, 1)
+        diffs = tiled - tiled_trans
+        sqd_dist_mat = th.sum(th.square(diffs), dim=2)
+
+        return sqd_dist_mat
+
+    def make_q(self, z, alpha):
+        sqd_dist_mat = self.pairwise_sqd_distance(z)
+        q = th.pow((1 + sqd_dist_mat / alpha), -(alpha + 1) / 2)
+        q = q.fill_diagonal_(0)
+        q = q / th.sum(q, dim=0, keepdims=True)
+        q = th.clamp(q, 1e-10, 1.0)
+
+        return q
 
     def forward(
         self, features: th.Tensor
-    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor]:
+    ) -> Tuple[
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+        th.Tensor,
+    ]:
         """
         :return: latent_policy, latent_value of the specified network.
             If all layers are shared, then ``latent_policy == latent_value``
         """
         actor_features = self.forward_actor(features)
-        actor_vq_loss, _, actor_encoding_indices = self.quantize_actor(actor_features)
-        critic_features = self.forward_critic(features)
-        critic_vq_loss, _, critic_encoding_indices = self.quantize_critic(
-            critic_features
+        actor_features_fdr = self.policy_fdr_layer(actor_features)
+        actor_vq_loss, _, actor_encoding_indices = self.quantize_actor(
+            actor_features_fdr
         )
+        critic_features = self.forward_critic(features)
+        critic_features_fdr = self.critic_fdr_layer(critic_features)
+        critic_vq_loss, _, critic_encoding_indices = self.quantize_critic(
+            critic_features_fdr
+        )
+        if actor_features.shape[0] == 1 or actor_features.shape[0] == 1:
+            actor_fdr_loss = 0
+            critic_fdr_loss = 0
+        else:
+            p_actor = self.make_q(actor_features, alpha=self.alpha1)
+            q_actor = self.make_q(actor_features_fdr, alpha=self.alpha2)
+            actor_fdr_loss = th.mean(
+                th.sum(-(th.multiply(p_actor, th.log(q_actor))))
+                / (p_actor.shape[0] * q_actor.shape[1])
+            )
+            p_critic = self.make_q(critic_features, alpha=self.alpha1)
+            q_critic = self.make_q(critic_features_fdr, alpha=self.alpha2)
+            critic_fdr_loss = th.mean(
+                th.sum(-(th.multiply(p_critic, th.log(q_critic))))
+                / (p_critic.shape[0] * q_critic.shape[1])
+            )
+
         return (
             actor_features,
             critic_features,
+            actor_fdr_loss,
+            critic_fdr_loss,
             actor_vq_loss,
             critic_vq_loss,
             actor_encoding_indices,

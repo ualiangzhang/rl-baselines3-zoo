@@ -708,7 +708,7 @@ class ActorCriticPolicy(BasePolicy):
 
     def forward(
         self, obs: th.Tensor, deterministic: bool = False
-    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor]:
+    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -722,6 +722,8 @@ class ActorCriticPolicy(BasePolicy):
             (
                 latent_pi,
                 latent_vf,
+                actor_fdr_loss,
+                critic_fdr_loss,
                 actor_vq_loss,
                 critic_vq_loss,
                 actor_encoding_indices,
@@ -737,7 +739,7 @@ class ActorCriticPolicy(BasePolicy):
         actions = distribution.get_actions(deterministic=deterministic)
         log_prob = distribution.log_prob(actions)
         actions = actions.reshape((-1, *self.action_space.shape))  # type: ignore[misc]
-        return actions, values, log_prob, actor_vq_loss, critic_vq_loss
+        return actions, values, log_prob, actor_fdr_loss, critic_vq_loss, actor_vq_loss, critic_vq_loss
 
     def extract_features(  # type: ignore[override]
         self,
@@ -813,7 +815,7 @@ class ActorCriticPolicy(BasePolicy):
 
     def evaluate_actions(
         self, obs: PyTorchObs, actions: th.Tensor
-    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], th.Tensor, th.Tensor]:
+    ) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor], th.Tensor, th.Tensor, th.Tensor, th.Tensor]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -829,6 +831,8 @@ class ActorCriticPolicy(BasePolicy):
             (
                 latent_pi,
                 latent_vf,
+                actor_fdr_loss,
+                critic_fdr_loss,
                 actor_vq_loss,
                 critic_vq_loss,
                 actor_encoding_indices,
@@ -842,7 +846,7 @@ class ActorCriticPolicy(BasePolicy):
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         entropy = distribution.entropy()
-        return values, log_prob, entropy, actor_vq_loss, critic_vq_loss
+        return values, log_prob, entropy, actor_fdr_loss, critic_fdr_loss, actor_vq_loss, critic_vq_loss
 
     def get_distribution(self, obs: PyTorchObs) -> Distribution:
         """
