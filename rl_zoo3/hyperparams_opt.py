@@ -166,6 +166,7 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
             1,
         ],
     )
+    quantize_dim = trial.suggest_categorical("quantize_dim", [4, 8, 16, 32, 64])
 
     return {
         "learning_rate": learning_rate,
@@ -177,6 +178,7 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
                 reg_weight=reg_weight,
                 reg_alpha=reg_alpha,
                 num_embs=num_embs,
+                quantize_dim=quantize_dim
             ),
         ),
     }
