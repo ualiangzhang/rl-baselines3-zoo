@@ -105,40 +105,13 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     if lr_schedule == "linear":
         learning_rate = linear_schedule(learning_rate)
 
-    reg_weight = trial.suggest_categorical(
-        "reg_weight",
-        [
-            0.0001,
-            0.00025,
-            0.0005,
-            0.001,
-            0.0025,
-            0.005,
-            0.01,
-            0.025,
-            0.05,
-            0.1,
-            0.25,
-            0.5,
-            1,
-        ],
-    )
-    reg_alpha = trial.suggest_categorical(
-        "reg_alpha", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    )
-    num_embs = trial.suggest_categorical("num_embs", [8, 16, 32, 64, 128, 256])
+    num_embs = trial.suggest_categorical("num_embs", [8, 16, 32, 64, 128])
     commitment_cost = trial.suggest_categorical(
         "commitment_cost", [0.01, 0.025, 0.05, 0.1, 0.25, 0.5]
     )
     fdr_coef = trial.suggest_categorical(
         "fdr_coef",
         [
-            0.0001,
-            0.00025,
-            0.0005,
-            0.001,
-            0.0025,
-            0.005,
             0.01,
             0.025,
             0.05,
@@ -151,12 +124,6 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
     vq_coef = trial.suggest_categorical(
         "vq_coef",
         [
-            0.0001,
-            0.00025,
-            0.0005,
-            0.001,
-            0.0025,
-            0.005,
             0.01,
             0.025,
             0.05,
@@ -166,17 +133,28 @@ def sample_vqppo_params(trial: optuna.Trial) -> Dict[str, Any]:
             1,
         ],
     )
-    quantize_dim = trial.suggest_categorical("quantize_dim", [4, 8, 16, 32, 64])
+    class_coef = trial.suggest_categorical(
+        "class_coef",
+        [
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1,
+        ],
+    )
+    quantize_dim = trial.suggest_categorical("quantize_dim", [2, 4, 8, 16, 32])
 
     return {
         "learning_rate": learning_rate,
         "fdr_coef": fdr_coef,
         "vq_coef": vq_coef,
+        "class_coef": class_coef,
         "policy_kwargs": dict(
             net_arch_kwargs=dict(
                 commitment_cost=commitment_cost,
-                reg_weight=reg_weight,
-                reg_alpha=reg_alpha,
                 num_embs=num_embs,
                 quantize_dim=quantize_dim
             ),
