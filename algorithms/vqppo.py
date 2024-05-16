@@ -100,6 +100,7 @@ class VQPPO(OnPolicyAlgorithm):
         vf_coef: float = 0.5,
         fdr_coef: float = 0.5,
         vq_coef: float = 0.5,
+        class_coef: float = 0.5,
         max_grad_norm: float = 0.5,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
@@ -125,6 +126,7 @@ class VQPPO(OnPolicyAlgorithm):
             vf_coef=vf_coef,
             fdr_coef=fdr_coef,
             vq_coef=vq_coef,
+            class_coef=class_coef,
             max_grad_norm=max_grad_norm,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
@@ -213,10 +215,9 @@ class VQPPO(OnPolicyAlgorithm):
             pg_losses,
             value_losses,
             actor_fdr_losses,
-            critic_fdr_losses,
             actor_vq_losses,
-            critic_vq_losses,
-        ) = ([], [], [], [], [], [])
+            class_losses,
+        ) = ([], [], [], [], [])
         clip_fractions = []
 
         continue_training = True
@@ -239,9 +240,8 @@ class VQPPO(OnPolicyAlgorithm):
                     log_prob,
                     entropy,
                     actor_fdr_loss,
-                    critic_fdr_loss,
                     actor_vq_loss,
-                    critic_vq_loss,
+                    class_loss
                 ) = self.policy.evaluate_actions(rollout_data.observations, actions)
                 values = values.flatten()
                 # Normalize advantage
@@ -282,11 +282,12 @@ class VQPPO(OnPolicyAlgorithm):
 
                 # FDR loss
                 actor_fdr_losses.append(actor_fdr_loss.item())
-                critic_fdr_losses.append(critic_fdr_loss.item())
 
                 # VQ loss
                 actor_vq_losses.append(actor_vq_loss.item())
-                critic_vq_losses.append(critic_vq_loss.item())
+
+                # Classification loss
+                class_losses.append(class_loss.item())
 
                 # Entropy loss favor exploration
                 if entropy is None:
@@ -301,8 +302,9 @@ class VQPPO(OnPolicyAlgorithm):
                     policy_loss
                     + self.ent_coef * entropy_loss
                     + self.vf_coef * value_loss
-                    + self.fdr_coef * (actor_fdr_loss + critic_fdr_loss)
-                    + self.vq_coef * (actor_vq_loss + critic_vq_loss)
+                    + self.fdr_coef * actor_fdr_loss
+                    + self.vq_coef * actor_vq_loss
+                    + self.class_coef * class_loss
                 )
 
                 # Calculate approximate form of reverse KL Divergence for early stopping
@@ -346,9 +348,8 @@ class VQPPO(OnPolicyAlgorithm):
         self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
         self.logger.record("train/value_loss", np.mean(value_losses))
         self.logger.record("train/actor_fdr_loss", np.mean(actor_fdr_losses))
-        self.logger.record("train/critic_fdr_loss", np.mean(critic_fdr_losses))
         self.logger.record("train/actor_vq_loss", np.mean(actor_vq_losses))
-        self.logger.record("train/critic_vq_loss", np.mean(critic_vq_losses))
+        self.logger.record("train/class_loss", np.mean(class_losses))
         self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
         self.logger.record("train/clip_fraction", np.mean(clip_fractions))
         self.logger.record("train/loss", loss.item())

@@ -280,6 +280,7 @@ class MlpExtractor(nn.Module):
         last_layer_dim_vf = feature_dim
         self.alpha1 = alpha1
         self.alpha2 = alpha2
+        self.num_embs = num_embs
 
         # save dimensions of layers in policy and value nets
         if isinstance(net_arch, dict):
@@ -309,30 +310,14 @@ class MlpExtractor(nn.Module):
         self.value_net = nn.Sequential(*value_net).to(device)
 
         self.policy_fdr_layer = nn.Sequential(
-            nn.Linear(net_arch.get("pi")[-1], net_arch.get("pi")[-1] // 2),
+            nn.Linear(net_arch.get("pi")[-1], net_arch.get("pi")[-1]),
             nn.ReLU(),
-            nn.Linear(net_arch.get("pi")[-1] // 2, net_arch.get("pi")[-1] // 2),
+            nn.Linear(net_arch.get("pi")[-1], net_arch.get("pi")[-1]),
             nn.ReLU(),
-            nn.Linear(net_arch.get("pi")[-1] // 2, quantize_dim),
-        )
-
-        self.critic_fdr_layer = nn.Sequential(
-            nn.Linear(net_arch.get("vf")[-1], net_arch.get("vf")[-1] // 2),
-            nn.ReLU(),
-            nn.Linear(net_arch.get("vf")[-1] // 2, net_arch.get("vf")[-1] // 2),
-            nn.ReLU(),
-            nn.Linear(net_arch.get("vf")[-1] // 2, quantize_dim),
+            nn.Linear(net_arch.get("pi")[-1], quantize_dim),
         )
 
         self.quantize_actor = Quantize(
-            num_embs,
-            quantize_dim,
-            commitment_cost,
-            Cd,
-            reg_weight,
-            reg_alpha,
-        )
-        self.quantize_critic = Quantize(
             num_embs,
             quantize_dim,
             commitment_cost,
@@ -365,10 +350,7 @@ class MlpExtractor(nn.Module):
         th.Tensor,
         th.Tensor,
         th.Tensor,
-        th.Tensor,
-        th.Tensor,
-        th.Tensor,
-        th.Tensor,
+        th.Tensor
     ]:
         """
         :return: latent_policy, latent_value of the specified network.
@@ -380,13 +362,9 @@ class MlpExtractor(nn.Module):
             actor_features_fdr
         )
         critic_features = self.forward_critic(features)
-        critic_features_fdr = self.critic_fdr_layer(critic_features)
-        critic_vq_loss, _, critic_encoding_indices = self.quantize_critic(
-            critic_features_fdr
-        )
-        if actor_features.shape[0] == 1 or actor_features.shape[0] == 1:
+
+        if actor_features.shape[0] == 1:
             actor_fdr_loss = 0
-            critic_fdr_loss = 0
         else:
             p_actor = self.make_q(actor_features, alpha=self.alpha1)
             q_actor = self.make_q(actor_features_fdr, alpha=self.alpha2)
@@ -394,22 +372,13 @@ class MlpExtractor(nn.Module):
                 th.sum(-(th.multiply(p_actor, th.log(q_actor))))
                 / (p_actor.shape[0] * q_actor.shape[1])
             )
-            p_critic = self.make_q(critic_features, alpha=self.alpha1)
-            q_critic = self.make_q(critic_features_fdr, alpha=self.alpha2)
-            critic_fdr_loss = th.mean(
-                th.sum(-(th.multiply(p_critic, th.log(q_critic))))
-                / (p_critic.shape[0] * q_critic.shape[1])
-            )
 
         return (
             actor_features,
             critic_features,
             actor_fdr_loss,
-            critic_fdr_loss,
             actor_vq_loss,
-            critic_vq_loss,
             actor_encoding_indices,
-            critic_encoding_indices,
         )
 
     def forward_actor(self, features: th.Tensor) -> th.Tensor:
