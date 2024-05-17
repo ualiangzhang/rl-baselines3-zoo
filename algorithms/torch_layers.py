@@ -265,7 +265,7 @@ class MlpExtractor(nn.Module):
         device: Union[th.device, str] = "auto",
         commitment_cost: float = 0.25,
         Cd: float = 5,
-        reg_weight: float = 0.1,
+        reg_weight: float = 0.0,
         reg_alpha: float = 0.5,
         num_embs: int = 8,
         quantize_dim: int = 64,
